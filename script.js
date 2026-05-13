@@ -18,11 +18,11 @@ const convertAnother = document.getElementById("convert-another");
 const tryAgain = document.getElementById("try-again");
 const errorMessage = document.getElementById("error-message");
 const formatBtns = document.querySelectorAll(".format-btn");
+const atsScoreEl = document.getElementById("ats-score");
 
-let downloadUrl = null;
-let downloadFilename = "resume-ats.pdf";
+let optimizedText = null;
+let downloadFilename = "resume-ats";
 let selectedFormat = null;
-let uploadedFile = null;
 
 // ── Background Canvas ──
 (function initCanvas() {
@@ -198,10 +198,8 @@ function handleFile(file) {
         return;
     }
 
-    uploadedFile = file;
     fileNameEl.textContent = file.name;
     fileSizeEl.textContent = formatFileSize(file.size);
-
     downloadFilename = file.name.replace(/\.[^.]+$/, "") + "-ats";
 
     showStep("processing");
@@ -294,38 +292,35 @@ async function uploadFile(file) {
         setProgress(70, "Converting to ATS format...");
 
         if (!response.ok) {
-            throw new Error(`Server error (${response.status})`);
+            const errorData = await response.json().catch(() => null);
+            throw new Error(
+                errorData?.error || `Server error (${response.status})`
+            );
         }
 
         setProcessingStep("finalize");
         setProgress(90, "Preparing your download...");
 
         const contentType = response.headers.get("content-type") || "";
-        let blob;
 
         if (contentType.includes("application/json")) {
             const data = await response.json();
 
-            if (data.fileUrl) {
-                downloadUrl = data.fileUrl;
-            } else if (data.fileBase64) {
-                const binary = atob(data.fileBase64);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) {
-                    bytes[i] = binary.charCodeAt(i);
-                }
-                const mimeType = data.mimeType || "application/pdf";
-                blob = new Blob([bytes], { type: mimeType });
-                downloadUrl = URL.createObjectURL(blob);
-            } else if (data.text) {
-                blob = new Blob([data.text], { type: "text/plain" });
-                downloadUrl = URL.createObjectURL(blob);
-            } else {
-                throw new Error("Unexpected response format from server.");
+            if (data.success === false) {
+                throw new Error(data.error || "Processing failed.");
             }
+
+            optimizedText = data.text || "";
+            const score = data.atsScore || 0;
+            atsScoreEl.textContent = score;
         } else {
-            blob = await response.blob();
-            downloadUrl = URL.createObjectURL(blob);
+            const text = await response.text();
+            optimizedText = text;
+            atsScoreEl.textContent = "--";
+        }
+
+        if (!optimizedText || optimizedText.length < 10) {
+            throw new Error("The server returned an empty result. Please try again.");
         }
 
         setProgress(100, "Done!");
@@ -335,14 +330,8 @@ async function uploadFile(file) {
     } catch (err) {
         console.error("Upload failed:", err);
         showStep("error");
-
-        if (N8N_WEBHOOK_URL === "YOUR_N8N_WEBHOOK_URL_HERE") {
-            errorMessage.textContent =
-                "Webhook URL not configured. Update N8N_WEBHOOK_URL in script.js.";
-        } else {
-            errorMessage.textContent =
-                err.message || "We couldn't process your file. Please try again.";
-        }
+        errorMessage.textContent =
+            err.message || "We couldn't process your file. Please try again.";
     }
 }
 
@@ -350,93 +339,29 @@ function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
 }
 
-// ── Download ──
-downloadBtn.addEventListener("click", async () => {
-    if (!selectedFormat) return;
+// ── Download (client-side from stored text) ──
+downloadBtn.addEventListener("click", () => {
+    if (!selectedFormat || !optimizedText) return;
 
-    downloadLoading.classList.remove("hidden");
-    downloadBtn.style.display = "none";
+    const fname = downloadFilename + "." + selectedFormat;
+    const blob = new Blob([optimizedText], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
 
-    try {
-        const formData = new FormData();
-        formData.append("file", uploadedFile);
-        formData.append("filename", uploadedFile.name);
-        formData.append("format", selectedFormat);
-
-        const response = await fetch(N8N_WEBHOOK_URL, {
-            method: "POST",
-            body: formData,
-        });
-
-        if (!response.ok) {
-            throw new Error(`Server error (${response.status})`);
-        }
-
-        const contentType = response.headers.get("content-type") || "";
-        let blob;
-        const fname = downloadFilename + "." + selectedFormat;
-
-        if (contentType.includes("application/json")) {
-            const data = await response.json();
-
-            if (data.fileUrl) {
-                triggerDownload(data.fileUrl, fname);
-                downloadLoading.classList.add("hidden");
-                downloadBtn.style.display = "inline-flex";
-                return;
-            } else if (data.fileBase64) {
-                const binary = atob(data.fileBase64);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) {
-                    bytes[i] = binary.charCodeAt(i);
-                }
-                const mimeType = data.mimeType || "application/octet-stream";
-                blob = new Blob([bytes], { type: mimeType });
-            } else if (data.text) {
-                blob = new Blob([data.text], { type: "text/plain" });
-            } else {
-                throw new Error("Unexpected response format.");
-            }
-        } else {
-            blob = await response.blob();
-        }
-
-        const url = URL.createObjectURL(blob);
-        triggerDownload(url, fname);
-        URL.revokeObjectURL(url);
-    } catch (err) {
-        console.error("Download failed:", err);
-
-        if (N8N_WEBHOOK_URL === "YOUR_N8N_WEBHOOK_URL_HERE") {
-            alert("Webhook URL not configured. Update N8N_WEBHOOK_URL in script.js.");
-        } else {
-            alert("Failed to download: " + (err.message || "Unknown error"));
-        }
-    }
-
-    downloadLoading.classList.add("hidden");
-    downloadBtn.style.display = "inline-flex";
-});
-
-function triggerDownload(url, filename) {
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename;
+    a.download = fname;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-}
+    URL.revokeObjectURL(url);
+});
 
 // ── Reset ──
 convertAnother.addEventListener("click", resetToUpload);
 tryAgain.addEventListener("click", resetToUpload);
 
 function resetToUpload() {
-    if (downloadUrl && downloadUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(downloadUrl);
-    }
-    downloadUrl = null;
-    uploadedFile = null;
+    optimizedText = null;
     selectedFormat = null;
     fileInput.value = "";
     showStep("upload");
