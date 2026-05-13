@@ -339,21 +339,143 @@ function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
 }
 
-// ── Download (client-side from stored text) ──
-downloadBtn.addEventListener("click", () => {
-    if (!selectedFormat || !optimizedText) return;
+// ── File Generators ──
 
-    const fname = downloadFilename + "." + selectedFormat;
-    const blob = new Blob([optimizedText], { type: "text/plain;charset=utf-8" });
+function isHeading(line) {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    return (
+        trimmed === trimmed.toUpperCase() &&
+        trimmed.length > 2 &&
+        trimmed.length < 60 &&
+        /^[A-Z]/.test(trimmed)
+    );
+}
+
+function generatePDF(text, filename) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 50;
+    const maxW = pageW - margin * 2;
+    const bodySize = 10.5;
+    const headingSize = 12;
+    const lineGap = 5;
+
+    let y = margin;
+
+    const lines = text.split("\n");
+
+    for (const rawLine of lines) {
+        const line = rawLine.trimEnd();
+
+        if (line.trim() === "") {
+            y += bodySize + lineGap;
+            if (y > pageH - margin) { doc.addPage(); y = margin; }
+            continue;
+        }
+
+        const heading = isHeading(line);
+        const fontSize = heading ? headingSize : bodySize;
+        const fontStyle = heading ? "bold" : "normal";
+
+        doc.setFont("helvetica", fontStyle);
+        doc.setFontSize(fontSize);
+
+        if (heading && y > margin + 10) {
+            y += 6;
+        }
+
+        const wrapped = doc.splitTextToSize(line, maxW);
+
+        for (const wl of wrapped) {
+            if (y > pageH - margin) { doc.addPage(); y = margin; }
+            doc.text(wl, margin, y);
+            y += fontSize + lineGap;
+        }
+
+        if (heading) {
+            y += 2;
+            doc.setDrawColor(180);
+            doc.setLineWidth(0.5);
+            doc.line(margin, y - 4, pageW - margin, y - 4);
+        }
+    }
+
+    doc.save(filename);
+}
+
+function generateWordDoc(text, filename) {
+    const paragraphs = text.split("\n").map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return "<p>&nbsp;</p>";
+        if (isHeading(trimmed)) {
+            return `<h2 style="font-size:13pt;font-weight:bold;color:#1a1a2e;border-bottom:1px solid #ccc;padding-bottom:3pt;margin-top:12pt;margin-bottom:4pt;">${escapeHtml(trimmed)}</h2>`;
+        }
+        if (trimmed.startsWith("-")) {
+            return `<p style="margin-left:18pt;text-indent:-12pt;margin-top:2pt;margin-bottom:2pt;">${escapeHtml(trimmed)}</p>`;
+        }
+        return `<p style="margin-top:2pt;margin-bottom:2pt;">${escapeHtml(trimmed)}</p>`;
+    });
+
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8">
+<style>
+body{font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.4;color:#222;margin:1in;}
+h2{font-family:Calibri,Arial,sans-serif;}
+p{font-family:Calibri,Arial,sans-serif;}
+</style></head>
+<body>${paragraphs.join("\n")}</body></html>`;
+
+    const blob = new Blob(["﻿" + html], { type: "application/msword" });
+    triggerBlobDownload(blob, filename);
+}
+
+function generateTXT(text, filename) {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    triggerBlobDownload(blob, filename);
+}
+
+function escapeHtml(str) {
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function triggerBlobDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement("a");
     a.href = url;
-    a.download = fname;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+// ── Download ──
+downloadBtn.addEventListener("click", () => {
+    if (!selectedFormat || !optimizedText) return;
+
+    const fname = downloadFilename + "." + selectedFormat;
+
+    switch (selectedFormat) {
+        case "pdf":
+            generatePDF(optimizedText, fname);
+            break;
+        case "docx":
+        case "doc":
+            generateWordDoc(optimizedText, fname);
+            break;
+        case "txt":
+        default:
+            generateTXT(optimizedText, fname);
+            break;
+    }
 });
 
 // ── Reset ──
