@@ -7,12 +7,22 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "5b47a496-b056-4c53-b885-6f33bd96b430",
+      "id": "03e2b97e-517d-4677-9796-28453045a171",
       "name": "Webhook — Receive Resume Upload",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-1728, 144],
+      "position": [-272, 112],
       "webhookId": "ats-resume-webhook-001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Detect uploaded file regardless of field name and normalize to 'resume'\nconst item = $input.first();\nconst binary = item.binary || {};\nconst binaryKeys = Object.keys(binary);\n\nif (binaryKeys.length === 0) {\n  return [{ json: { fileFound: false } }];\n}\n\nconst firstKey = binaryKeys[0];\nreturn [{\n  json: { ...item.json, fileFound: true },\n  binary: { resume: binary[firstKey] }\n}];"
+      },
+      "id": "aaa11111-1111-1111-1111-111111111111",
+      "name": "Code — Detect File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-32, 112]
     },
     {
       "parameters": {
@@ -25,7 +35,7 @@
           "conditions": [
             {
               "id": "check-file",
-              "leftValue": "={{ $binary !== undefined && $binary.resume !== undefined }}",
+              "leftValue": "={{ $json.fileFound }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -37,11 +47,11 @@
         },
         "options": {}
       },
-      "id": "b31538ab-3fc1-445c-b8ab-183b11d008c2",
+      "id": "888ec3d5-ce5d-4fa4-8782-976159e1c9ec",
       "name": "IF — File Exists?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [-1408, 112]
+      "position": [192, 112]
     },
     {
       "parameters": {
@@ -59,11 +69,11 @@
           }
         }
       },
-      "id": "efe9fd51-3c4d-4c57-bab3-d147a1a01cda",
+      "id": "23ded0d3-9fb2-4f6a-82e7-5dd90a9559ca",
       "name": "Respond — Error: No File",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [-1248, 304]
+      "position": [432, 272]
     },
     {
       "parameters": {
@@ -71,21 +81,21 @@
         "binaryPropertyName": "resume",
         "options": {}
       },
-      "id": "b69de701-7499-4e5e-b350-fcb7f0c538d1",
+      "id": "ea22f4df-3b4a-44c2-87e4-26f476e8d082",
       "name": "Extract Text from File",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
-      "position": [-1248, 96]
+      "position": [432, 64]
     },
     {
       "parameters": {
         "jsCode": "// Sanitize and prepare extracted text + metadata\nconst rawText = $input.first().json.text || $input.first().json.data || '';\nconst body = $('Webhook — Receive Resume Upload').first().json.body || {};\n\nconst jobTitle = body.job_title || 'General / Not Specified';\nconst jobDescription = body.job_description || 'No job description provided. Optimize for general ATS systems.';\n\n// Basic cleaning\nconst cleanedText = rawText\n  .replace(/[\\r\\n]{3,}/g, '\\n\\n')\n  .replace(/\\t/g, ' ')\n  .replace(/ {3,}/g, '  ')\n  .trim();\n\nreturn [{\n  json: {\n    rawText: cleanedText,\n    jobTitle,\n    jobDescription,\n    charCount: cleanedText.length,\n    timestamp: new Date().toISOString()\n  }\n}];"
       },
-      "id": "dd4af638-a3b2-47e8-af1b-f83b1d9772d3",
+      "id": "1e9f3dcf-baec-4e27-bee1-2fd1f0f68203",
       "name": "Code — Clean & Prepare Text",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-1056, 112]
+      "position": [656, 80]
     },
     {
       "parameters": {
@@ -102,23 +112,24 @@
             }
           ]
         },
+        "builtInTools": {},
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.googleGemini",
       "typeVersion": 1.1,
-      "position": [-832, 112],
-      "id": "e8c31a75-42cd-49c0-80e6-dfe491d352f6",
+      "position": [880, 80],
+      "id": "728dc049-d279-4973-9b1d-d0f73a7f6b9f",
       "name": "Gemini — ATS Optimize"
     },
     {
       "parameters": {
-        "jsCode": "// Extract the optimized resume text from Gemini response\nconst aiResponse = $input.first().json;\nlet optimizedText = '';\n\nif (aiResponse.message && aiResponse.message.content) {\n  optimizedText = aiResponse.message.content;\n} else if (aiResponse.text) {\n  optimizedText = aiResponse.text;\n} else if (aiResponse.output) {\n  optimizedText = aiResponse.output;\n} else if (aiResponse.choices && aiResponse.choices[0]) {\n  optimizedText = aiResponse.choices[0].message?.content || aiResponse.choices[0].text || '';\n} else {\n  // Fallback: try to find any string content\n  const vals = Object.values(aiResponse);\n  for (const v of vals) {\n    if (typeof v === 'string' && v.length > 100) {\n      optimizedText = v;\n      break;\n    }\n  }\n  if (!optimizedText) {\n    optimizedText = JSON.stringify(aiResponse);\n  }\n}\n\n// ATS Score simulation\nconst atsChecks = {\n  hasContactSection: /CONTACT INFORMATION/i.test(optimizedText),\n  hasSummary: /PROFESSIONAL SUMMARY|SUMMARY/i.test(optimizedText),\n  hasSkills: /SKILLS/i.test(optimizedText),\n  hasExperience: /WORK EXPERIENCE|EXPERIENCE/i.test(optimizedText),\n  hasEducation: /EDUCATION/i.test(optimizedText),\n  hasActionVerbs: /(managed|led|developed|created|implemented|increased|reduced|achieved|delivered|built|designed|analyzed|coordinated|maintained)/i.test(optimizedText),\n  hasQuantifiedResults: /\\d+%|\\$\\d+|\\d+ (people|team|projects|clients|users)/i.test(optimizedText),\n  noTables: !/<table|\\|.*\\|/i.test(optimizedText),\n  noBulletSymbols: !/[\\u2022\\u25CF\\u25C6\\u25AA\\u25A0]/g.test(optimizedText),\n  standardDates: /\\d{4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(optimizedText)\n};\n\nconst passedChecks = Object.values(atsChecks).filter(Boolean).length;\nconst totalChecks = Object.keys(atsChecks).length;\nconst atsScore = Math.round((passedChecks / totalChecks) * 100);\n\nreturn [{\n  json: {\n    optimizedResume: optimizedText.trim(),\n    atsScore,\n    atsChecks,\n    wordCount: optimizedText.trim().split(/\\s+/).length,\n    optimizedAt: new Date().toISOString()\n  }\n}];"
+        "jsCode": "// Extract the optimized resume text from Gemini response\nconst aiResponse = $input.first().json;\nlet optimizedText = '';\n\nif (aiResponse.message && aiResponse.message.content) {\n  optimizedText = aiResponse.message.content;\n} else if (aiResponse.text) {\n  optimizedText = aiResponse.text;\n} else if (aiResponse.output) {\n  optimizedText = aiResponse.output;\n} else if (aiResponse.choices && aiResponse.choices[0]) {\n  optimizedText = aiResponse.choices[0].message?.content || aiResponse.choices[0].text || '';\n} else {\n  const vals = Object.values(aiResponse);\n  for (const v of vals) {\n    if (typeof v === 'string' && v.length > 100) {\n      optimizedText = v;\n      break;\n    }\n  }\n  if (!optimizedText) {\n    optimizedText = JSON.stringify(aiResponse);\n  }\n}\n\n// ATS Score simulation\nconst atsChecks = {\n  hasContactSection: /CONTACT INFORMATION/i.test(optimizedText),\n  hasSummary: /PROFESSIONAL SUMMARY|SUMMARY/i.test(optimizedText),\n  hasSkills: /SKILLS/i.test(optimizedText),\n  hasExperience: /WORK EXPERIENCE|EXPERIENCE/i.test(optimizedText),\n  hasEducation: /EDUCATION/i.test(optimizedText),\n  hasActionVerbs: /(managed|led|developed|created|implemented|increased|reduced|achieved|delivered|built|designed|analyzed|coordinated|maintained)/i.test(optimizedText),\n  hasQuantifiedResults: /\\d+%|\\$\\d+|\\d+ (people|team|projects|clients|users)/i.test(optimizedText),\n  noTables: !/<table|\\|.*\\|/i.test(optimizedText),\n  noBulletSymbols: !/[\\u2022\\u25CF\\u25C6\\u25AA\\u25A0]/g.test(optimizedText),\n  standardDates: /\\d{4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(optimizedText)\n};\n\nconst passedChecks = Object.values(atsChecks).filter(Boolean).length;\nconst totalChecks = Object.keys(atsChecks).length;\nconst atsScore = Math.round((passedChecks / totalChecks) * 100);\n\nreturn [{\n  json: {\n    optimizedResume: optimizedText.trim(),\n    atsScore,\n    atsChecks,\n    wordCount: optimizedText.trim().split(/\\s+/).length,\n    optimizedAt: new Date().toISOString()\n  }\n}];"
       },
-      "id": "5e2993cd-d8d6-4eb0-898e-49b35a4e766f",
+      "id": "ab85816a-c1ac-4719-8065-87442e76a52d",
       "name": "Code — Parse & Score ATS Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-480, 112]
+      "position": [1136, 80]
     },
     {
       "parameters": {
@@ -136,15 +147,26 @@
           }
         }
       },
-      "id": "0c1a8f6a-94fb-427f-9dc7-317f9e155ed8",
+      "id": "0d7d18e0-c419-4816-a129-7691e5ce941c",
       "name": "Respond — Return Optimized Resume",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [-192, 112]
+      "position": [1424, 80]
     }
   ],
   "connections": {
     "Webhook — Receive Resume Upload": {
+      "main": [
+        [
+          {
+            "node": "Code — Detect File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code — Detect File": {
       "main": [
         [
           {
