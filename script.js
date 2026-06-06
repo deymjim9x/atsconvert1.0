@@ -375,6 +375,9 @@ function isHeading(line) {
 }
 
 function generatePDF(text, filename) {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        throw new Error("PDF library failed to load. Please try TXT format instead.");
+    }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "pt", format: "a4" });
 
@@ -502,7 +505,7 @@ downloadBtn.addEventListener("click", () => {
     } catch (err) {
         console.error("Download generation failed:", err);
         showStep("error");
-        errorMessage.textContent = "Failed to generate the file. Try downloading as TXT instead.";
+        errorMessage.textContent = "Download failed: " + (err.message || "unknown error");
     }
 });
 
