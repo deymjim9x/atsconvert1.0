@@ -397,13 +397,20 @@ function generatePDF(text, filename) {
 
     const lines = text.split("\n").map(l => l.trimEnd());
 
+    // ── Skip "CONTACT INFORMATION" if Gemini puts it first ──
+    let startIdx = 0;
+    for (let s = 0; s < Math.min(lines.length, 3); s++) {
+        if (lines[s].trim().toUpperCase() === "CONTACT INFORMATION") { startIdx = s + 1; break; }
+    }
+
     // ── Header: name / subtitle / contact ──
     let headerLines = [];
-    let i = 0;
-    while (i < lines.length && headerLines.length < 4) {
+    let i = startIdx;
+    while (i < lines.length && headerLines.length < 5) {
         const t = lines[i].trim();
-        if (t) headerLines.push(t);
-        else if (headerLines.length > 0) { i++; break; }
+        if (t && !isHeading(t)) headerLines.push(t);
+        else if (t && isHeading(t)) break;
+        else if (headerLines.length > 0 && !t) { i++; break; }
         i++;
     }
 
@@ -420,19 +427,15 @@ function generatePDF(text, filename) {
         doc.setTextColor(...dgray);
         doc.text(headerLines[1], pageW / 2, y, { align: "center" });
         y += 16;
-    } else { i--; }
+    }
 
-    // Contact line — look for | or @ in next few lines
-    for (let ci = 2; ci < Math.min(headerLines.length, 4); ci++) {
+    // Contact lines — render remaining header lines (phone, email, website, etc.)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...lgray);
+    for (let ci = 2; ci < headerLines.length; ci++) {
         const cl = headerLines[ci];
-        if (cl && (cl.includes("|") || cl.includes("@") || cl.includes("+"))) {
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(9);
-            doc.setTextColor(...lgray);
-            doc.text(cl, pageW / 2, y, { align: "center" });
-            y += 13;
-            break;
-        }
+        if (cl) { doc.text(cl, pageW / 2, y, { align: "center" }); y += 13; }
     }
 
     // Separator
