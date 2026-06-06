@@ -397,51 +397,41 @@ function generatePDF(text, filename) {
 
     const lines = text.split("\n").map(l => l.trimEnd());
 
-    // ── Skip "CONTACT INFORMATION" if Gemini puts it first ──
-    let startIdx = 0;
-    for (let s = 0; s < Math.min(lines.length, 3); s++) {
-        if (lines[s].trim().toUpperCase() === "CONTACT INFORMATION") { startIdx = s + 1; break; }
-    }
+    // ── Header: collect all lines before the first known body section ──
+    const BODY_SECTION = /^(PROFESSIONAL SUMMARY|SUMMARY|SKILLS|TECHNICAL SKILLS|CORE COMPETENCIES|WORK EXPERIENCE|EXPERIENCE|EDUCATION|CERTIFICATIONS?|ACHIEVEMENTS?|AWARDS?|PROJECTS?|LANGUAGES?|REFERENCES?|VOLUNTEER)$/i;
 
-    // ── Header: name / subtitle / contact ──
-    let headerLines = [];
-    let i = startIdx;
-
-    // Skip any leading blank lines, then always treat the first non-empty line as the name
-    while (i < lines.length && !lines[i].trim()) i++;
-    if (i < lines.length) { headerLines.push(lines[i].trim()); i++; }
-
-    // Collect subtitle and contact lines until a real section heading
-    while (i < lines.length && headerLines.length < 5) {
+    let i = 0;
+    let rawHeader = [];
+    while (i < lines.length) {
         const t = lines[i].trim();
-        if (!t) { if (headerLines.length > 1) { i++; break; } i++; continue; }
-        if (isHeading(t)) break;
-        headerLines.push(t);
+        if (BODY_SECTION.test(t)) break;
+        if (t && !/^CONTACT INFORMATION$/i.test(t)) rawHeader.push(t);
         i++;
     }
 
-    if (headerLines[0]) {
+    // Render name — always the first header line, large bold centered
+    if (rawHeader[0]) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(22);
         doc.setTextColor(...navy);
-        doc.text(headerLines[0], pageW / 2, y, { align: "center" });
+        doc.text(rawHeader[0], pageW / 2, y, { align: "center" });
         y += 28;
     }
-    if (headerLines[1] && !isHeading(headerLines[1])) {
+    // Render title — second header line, normal centered
+    if (rawHeader[1]) {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(11);
         doc.setTextColor(...dgray);
-        doc.text(headerLines[1], pageW / 2, y, { align: "center" });
+        doc.text(rawHeader[1], pageW / 2, y, { align: "center" });
         y += 16;
     }
-
-    // Contact lines — render remaining header lines (phone, email, website, etc.)
+    // Render contact lines — third+ header lines, small centered
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(...lgray);
-    for (let ci = 2; ci < headerLines.length; ci++) {
-        const cl = headerLines[ci];
-        if (cl) { doc.text(cl, pageW / 2, y, { align: "center" }); y += 13; }
+    for (let ci = 2; ci < rawHeader.length; ci++) {
+        doc.text(rawHeader[ci], pageW / 2, y, { align: "center" });
+        y += 13;
     }
 
     // Separator
