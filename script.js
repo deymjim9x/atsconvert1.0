@@ -406,11 +406,17 @@ function generatePDF(text, filename) {
     // ── Header: name / subtitle / contact ──
     let headerLines = [];
     let i = startIdx;
+
+    // Skip any leading blank lines, then always treat the first non-empty line as the name
+    while (i < lines.length && !lines[i].trim()) i++;
+    if (i < lines.length) { headerLines.push(lines[i].trim()); i++; }
+
+    // Collect subtitle and contact lines until a real section heading
     while (i < lines.length && headerLines.length < 5) {
         const t = lines[i].trim();
-        if (t && !isHeading(t)) headerLines.push(t);
-        else if (t && isHeading(t)) break;
-        else if (headerLines.length > 0 && !t) { i++; break; }
+        if (!t) { if (headerLines.length > 1) { i++; break; } i++; continue; }
+        if (isHeading(t)) break;
+        headerLines.push(t);
         i++;
     }
 
