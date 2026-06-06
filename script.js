@@ -383,50 +383,122 @@ function generatePDF(text, filename) {
 
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
-    const margin = 50;
-    const maxW = pageW - margin * 2;
-    const bodySize = 10.5;
-    const headingSize = 12;
-    const lineGap = 5;
+    const mx = 50;
+    const maxW = pageW - mx * 2;
+    let y = mx;
 
-    let y = margin;
+    const navy  = [26,  54,  93];
+    const blue  = [28,  78, 140];
+    const dgray = [60,  60,  60];
+    const lgray = [110, 110, 110];
+    const black = [30,  30,  30];
 
-    const lines = text.split("\n");
+    function checkPage(h) { if (y + h > pageH - mx) { doc.addPage(); y = mx; } }
 
-    for (const rawLine of lines) {
-        const line = rawLine.trimEnd();
+    const lines = text.split("\n").map(l => l.trimEnd());
 
-        if (line.trim() === "") {
-            y += bodySize + lineGap;
-            if (y > pageH - margin) { doc.addPage(); y = margin; }
+    // ── Header: name / subtitle / contact ──
+    let headerLines = [];
+    let i = 0;
+    while (i < lines.length && headerLines.length < 4) {
+        const t = lines[i].trim();
+        if (t) headerLines.push(t);
+        else if (headerLines.length > 0) { i++; break; }
+        i++;
+    }
+
+    if (headerLines[0]) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(22);
+        doc.setTextColor(...navy);
+        doc.text(headerLines[0], pageW / 2, y, { align: "center" });
+        y += 28;
+    }
+    if (headerLines[1] && !isHeading(headerLines[1])) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        doc.setTextColor(...dgray);
+        doc.text(headerLines[1], pageW / 2, y, { align: "center" });
+        y += 16;
+    } else { i--; }
+
+    // Contact line — look for | or @ in next few lines
+    for (let ci = 2; ci < Math.min(headerLines.length, 4); ci++) {
+        const cl = headerLines[ci];
+        if (cl && (cl.includes("|") || cl.includes("@") || cl.includes("+"))) {
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(9);
+            doc.setTextColor(...lgray);
+            doc.text(cl, pageW / 2, y, { align: "center" });
+            y += 13;
+            break;
+        }
+    }
+
+    // Separator
+    y += 6;
+    doc.setDrawColor(...blue);
+    doc.setLineWidth(1.2);
+    doc.line(mx, y, pageW - mx, y);
+    y += 14;
+
+    // ── Body ──
+    for (; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (!line) { y += 5; continue; }
+
+        // Section heading
+        if (isHeading(line)) {
+            checkPage(28);
+            if (y > mx + 20) y += 4;
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(10.5);
+            doc.setTextColor(...blue);
+            doc.text(line, mx, y);
+            y += 4;
+            doc.setDrawColor(...blue);
+            doc.setLineWidth(0.5);
+            doc.line(mx, y, pageW - mx, y);
+            y += 12;
+            doc.setTextColor(...black);
             continue;
         }
 
-        const heading = isHeading(line);
-        const fontSize = heading ? headingSize : bodySize;
-        const fontStyle = heading ? "bold" : "normal";
-
-        doc.setFont("helvetica", fontStyle);
-        doc.setFontSize(fontSize);
-
-        if (heading && y > margin + 10) {
-            y += 6;
+        // Bullet point
+        if (line.startsWith("-")) {
+            const content = line.slice(1).trim();
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(9.5);
+            doc.setTextColor(...black);
+            const wrapped = doc.splitTextToSize(content, maxW - 14);
+            checkPage(wrapped.length * 13);
+            wrapped.forEach((wl, wi) => {
+                if (wi === 0) doc.text("•", mx + 3, y);
+                doc.text(wl, mx + 13, y);
+                y += 13;
+            });
+            continue;
         }
 
+        // Date line
+        if (/\b(19|20)\d{2}\b/.test(line) && (line.includes(" - ") || /present/i.test(line))) {
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(9);
+            doc.setTextColor(...lgray);
+            doc.text(line, mx, y);
+            y += 13;
+            continue;
+        }
+
+        // Job title / company — title-case short line → bold
         const wrapped = doc.splitTextToSize(line, maxW);
-
-        for (const wl of wrapped) {
-            if (y > pageH - margin) { doc.addPage(); y = margin; }
-            doc.text(wl, margin, y);
-            y += fontSize + lineGap;
-        }
-
-        if (heading) {
-            y += 2;
-            doc.setDrawColor(180);
-            doc.setLineWidth(0.5);
-            doc.line(margin, y - 4, pageW - margin, y - 4);
-        }
+        const looksLikeTitle = line.length < 70 && /^[A-Z]/.test(line) && !/[.]{2,}/.test(line);
+        doc.setFont("helvetica", looksLikeTitle ? "bold" : "normal");
+        doc.setFontSize(9.5);
+        doc.setTextColor(...black);
+        checkPage(wrapped.length * 13);
+        wrapped.forEach(wl => { doc.text(wl, mx, y); y += 13; });
     }
 
     doc.save(filename);

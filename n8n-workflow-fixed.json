@@ -8,10 +8,13 @@
         "options": {}
       },
       "id": "03e2b97e-517d-4677-9796-28453045a171",
-      "name": "Webhook — Receive Resume Upload",
+      "name": "Webhook \u2014 Receive Resume Upload",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-272, 112],
+      "position": [
+        -272,
+        112
+      ],
       "webhookId": "ats-resume-webhook-001"
     },
     {
@@ -19,10 +22,13 @@
         "jsCode": "// Detect uploaded file regardless of field name and normalize to 'resume'\nconst item = $input.first();\nconst binary = item.binary || {};\nconst binaryKeys = Object.keys(binary);\n\nif (binaryKeys.length === 0) {\n  return [{ json: { fileFound: false } }];\n}\n\nconst firstKey = binaryKeys[0];\nreturn [{\n  json: { ...item.json, fileFound: true },\n  binary: { resume: binary[firstKey] }\n}];"
       },
       "id": "aaa11111-1111-1111-1111-111111111111",
-      "name": "Code — Detect File",
+      "name": "Code \u2014 Detect File",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-32, 112]
+      "position": [
+        -32,
+        112
+      ]
     },
     {
       "parameters": {
@@ -48,10 +54,13 @@
         "options": {}
       },
       "id": "888ec3d5-ce5d-4fa4-8782-976159e1c9ec",
-      "name": "IF — File Exists?",
+      "name": "IF \u2014 File Exists?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [192, 112]
+      "position": [
+        192,
+        112
+      ]
     },
     {
       "parameters": {
@@ -70,10 +79,13 @@
         }
       },
       "id": "23ded0d3-9fb2-4f6a-82e7-5dd90a9559ca",
-      "name": "Respond — Error: No File",
+      "name": "Respond \u2014 Error: No File",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [432, 272]
+      "position": [
+        432,
+        272
+      ]
     },
     {
       "parameters": {
@@ -85,17 +97,23 @@
       "name": "Extract Text from File",
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
-      "position": [432, 64]
+      "position": [
+        432,
+        64
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Sanitize and prepare extracted text + metadata\nconst rawText = $input.first().json.text || $input.first().json.data || '';\nconst body = $('Webhook — Receive Resume Upload').first().json.body || {};\n\nconst jobTitle = body.job_title || 'General / Not Specified';\nconst jobDescription = body.job_description || 'No job description provided. Optimize for general ATS systems.';\n\n// Basic cleaning\nconst cleanedText = rawText\n  .replace(/[\\r\\n]{3,}/g, '\\n\\n')\n  .replace(/\\t/g, ' ')\n  .replace(/ {3,}/g, '  ')\n  .trim();\n\nreturn [{\n  json: {\n    rawText: cleanedText,\n    jobTitle,\n    jobDescription,\n    charCount: cleanedText.length,\n    timestamp: new Date().toISOString()\n  }\n}];"
+        "jsCode": "// Sanitize and prepare extracted text + metadata\nconst rawText = $input.first().json.text || $input.first().json.data || '';\nconst body = $('Webhook \u2014 Receive Resume Upload').first().json.body || {};\n\nconst jobTitle = body.job_title || 'General / Not Specified';\nconst jobDescription = body.job_description || 'No job description provided. Optimize for general ATS systems.';\n\n// Basic cleaning\nconst cleanedText = rawText\n  .replace(/[\\r\\n]{3,}/g, '\\n\\n')\n  .replace(/\\t/g, ' ')\n  .replace(/ {3,}/g, '  ')\n  .trim();\n\nreturn [{\n  json: {\n    rawText: cleanedText,\n    jobTitle,\n    jobDescription,\n    charCount: cleanedText.length,\n    timestamp: new Date().toISOString()\n  }\n}];"
       },
       "id": "1e9f3dcf-baec-4e27-bee1-2fd1f0f68203",
-      "name": "Code — Clean & Prepare Text",
+      "name": "Code \u2014 Clean & Prepare Text",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [656, 80]
+      "position": [
+        656,
+        80
+      ]
     },
     {
       "parameters": {
@@ -117,19 +135,25 @@
       },
       "type": "@n8n/n8n-nodes-langchain.googleGemini",
       "typeVersion": 1.1,
-      "position": [880, 80],
+      "position": [
+        880,
+        80
+      ],
       "id": "728dc049-d279-4973-9b1d-d0f73a7f6b9f",
-      "name": "Gemini — ATS Optimize"
+      "name": "Gemini \u2014 ATS Optimize"
     },
     {
       "parameters": {
-        "jsCode": "// Extract the optimized resume text from Gemini response\nconst aiResponse = $input.first().json;\nlet optimizedText = '';\n\nif (aiResponse.message && aiResponse.message.content) {\n  optimizedText = aiResponse.message.content;\n} else if (aiResponse.text) {\n  optimizedText = aiResponse.text;\n} else if (aiResponse.output) {\n  optimizedText = aiResponse.output;\n} else if (aiResponse.choices && aiResponse.choices[0]) {\n  optimizedText = aiResponse.choices[0].message?.content || aiResponse.choices[0].text || '';\n} else {\n  const vals = Object.values(aiResponse);\n  for (const v of vals) {\n    if (typeof v === 'string' && v.length > 100) {\n      optimizedText = v;\n      break;\n    }\n  }\n  if (!optimizedText) {\n    optimizedText = JSON.stringify(aiResponse);\n  }\n}\n\n// ATS Score simulation\nconst atsChecks = {\n  hasContactSection: /CONTACT INFORMATION/i.test(optimizedText),\n  hasSummary: /PROFESSIONAL SUMMARY|SUMMARY/i.test(optimizedText),\n  hasSkills: /SKILLS/i.test(optimizedText),\n  hasExperience: /WORK EXPERIENCE|EXPERIENCE/i.test(optimizedText),\n  hasEducation: /EDUCATION/i.test(optimizedText),\n  hasActionVerbs: /(managed|led|developed|created|implemented|increased|reduced|achieved|delivered|built|designed|analyzed|coordinated|maintained)/i.test(optimizedText),\n  hasQuantifiedResults: /\\d+%|\\$\\d+|\\d+ (people|team|projects|clients|users)/i.test(optimizedText),\n  noTables: !/<table|\\|.*\\|/i.test(optimizedText),\n  noBulletSymbols: !/[\\u2022\\u25CF\\u25C6\\u25AA\\u25A0]/g.test(optimizedText),\n  standardDates: /\\d{4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(optimizedText)\n};\n\nconst passedChecks = Object.values(atsChecks).filter(Boolean).length;\nconst totalChecks = Object.keys(atsChecks).length;\nconst atsScore = Math.round((passedChecks / totalChecks) * 100);\n\nreturn [{\n  json: {\n    optimizedResume: optimizedText.trim(),\n    atsScore,\n    atsChecks,\n    wordCount: optimizedText.trim().split(/\\s+/).length,\n    optimizedAt: new Date().toISOString()\n  }\n}];"
+        "jsCode": "// Extract the optimized resume text from Gemini response\nconst aiResponse = $input.first().json;\nlet optimizedText = '';\n\n// Google Gemini node response: { content: { parts: [{text}], role }, finishReason, index }\nif (aiResponse.content && aiResponse.content.parts) {\n  optimizedText = aiResponse.content.parts.map(p => p.text || '').join('');\n} else if (aiResponse.candidates && aiResponse.candidates[0]?.content?.parts) {\n  optimizedText = aiResponse.candidates[0].content.parts.map(p => p.text || '').join('');\n} else if (aiResponse.message && aiResponse.message.content) {\n  optimizedText = aiResponse.message.content;\n} else if (aiResponse.text) {\n  optimizedText = aiResponse.text;\n} else if (aiResponse.output) {\n  optimizedText = aiResponse.output;\n} else if (aiResponse.choices && aiResponse.choices[0]) {\n  optimizedText = aiResponse.choices[0].message?.content || aiResponse.choices[0].text || '';\n} else {\n  const vals = Object.values(aiResponse);\n  for (const v of vals) {\n    if (typeof v === 'string' && v.length > 100) { optimizedText = v; break; }\n  }\n}\n\n// ATS Score simulation\nconst atsChecks = {\n  hasContactSection: /CONTACT INFORMATION/i.test(optimizedText),\n  hasSummary: /PROFESSIONAL SUMMARY|SUMMARY/i.test(optimizedText),\n  hasSkills: /SKILLS/i.test(optimizedText),\n  hasExperience: /WORK EXPERIENCE|EXPERIENCE/i.test(optimizedText),\n  hasEducation: /EDUCATION/i.test(optimizedText),\n  hasActionVerbs: /(managed|led|developed|created|implemented|increased|reduced|achieved|delivered|built|designed|analyzed|coordinated|maintained)/i.test(optimizedText),\n  hasQuantifiedResults: /\\d+%|\\$\\d+|\\d+ (people|team|projects|clients|users)/i.test(optimizedText),\n  noTables: !/<table|\\|.*\\|/i.test(optimizedText),\n  noBulletSymbols: !/[\u2022\u25cf\u25c6\u25aa\u25a0]/g.test(optimizedText),\n  standardDates: /\\d{4}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(optimizedText)\n};\n\nconst passedChecks = Object.values(atsChecks).filter(Boolean).length;\nconst totalChecks = Object.keys(atsChecks).length;\nconst atsScore = Math.round((passedChecks / totalChecks) * 100);\n\nreturn [{\n  json: {\n    optimizedResume: optimizedText.trim(),\n    atsScore,\n    atsChecks,\n    wordCount: optimizedText.trim().split(/\\s+/).length,\n    optimizedAt: new Date().toISOString()\n  }\n}];"
       },
       "id": "ab85816a-c1ac-4719-8065-87442e76a52d",
-      "name": "Code — Parse & Score ATS Output",
+      "name": "Code \u2014 Parse & Score ATS Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1136, 80]
+      "position": [
+        1136,
+        80
+      ]
     },
     {
       "parameters": {
@@ -148,36 +172,39 @@
         }
       },
       "id": "0d7d18e0-c419-4816-a129-7691e5ce941c",
-      "name": "Respond — Return Optimized Resume",
+      "name": "Respond \u2014 Return Optimized Resume",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1424, 80]
+      "position": [
+        1424,
+        80
+      ]
     }
   ],
   "connections": {
-    "Webhook — Receive Resume Upload": {
+    "Webhook \u2014 Receive Resume Upload": {
       "main": [
         [
           {
-            "node": "Code — Detect File",
+            "node": "Code \u2014 Detect File",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code — Detect File": {
+    "Code \u2014 Detect File": {
       "main": [
         [
           {
-            "node": "IF — File Exists?",
+            "node": "IF \u2014 File Exists?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "IF — File Exists?": {
+    "IF \u2014 File Exists?": {
       "main": [
         [
           {
@@ -188,7 +215,7 @@
         ],
         [
           {
-            "node": "Respond — Error: No File",
+            "node": "Respond \u2014 Error: No File",
             "type": "main",
             "index": 0
           }
@@ -199,40 +226,40 @@
       "main": [
         [
           {
-            "node": "Code — Clean & Prepare Text",
+            "node": "Code \u2014 Clean & Prepare Text",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code — Clean & Prepare Text": {
+    "Code \u2014 Clean & Prepare Text": {
       "main": [
         [
           {
-            "node": "Gemini — ATS Optimize",
+            "node": "Gemini \u2014 ATS Optimize",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Gemini — ATS Optimize": {
+    "Gemini \u2014 ATS Optimize": {
       "main": [
         [
           {
-            "node": "Code — Parse & Score ATS Output",
+            "node": "Code \u2014 Parse & Score ATS Output",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code — Parse & Score ATS Output": {
+    "Code \u2014 Parse & Score ATS Output": {
       "main": [
         [
           {
-            "node": "Respond — Return Optimized Resume",
+            "node": "Respond \u2014 Return Optimized Resume",
             "type": "main",
             "index": 0
           }
