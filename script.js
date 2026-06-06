@@ -341,6 +341,18 @@ function sleep(ms) {
 
 // ── File Generators ──
 
+function sanitizeForPDF(text) {
+    return text
+        .replace(/[‘’ʼ]/g, "'")
+        .replace(/[“”«»]/g, '"')
+        .replace(/—|―/g, '--')
+        .replace(/–/g, '-')
+        .replace(/[•●◆▪■‣]/g, '-')
+        .replace(/…/g, '...')
+        .replace(/ /g, ' ')
+        .replace(/[^\x00-\xFF]/g, '');
+}
+
 function isHeading(line) {
     const trimmed = line.trim();
     if (!trimmed) return false;
@@ -463,18 +475,24 @@ downloadBtn.addEventListener("click", () => {
 
     const fname = downloadFilename + "." + selectedFormat;
 
-    switch (selectedFormat) {
-        case "pdf":
-            generatePDF(optimizedText, fname);
-            break;
-        case "docx":
-        case "doc":
-            generateWordDoc(optimizedText, fname);
-            break;
-        case "txt":
-        default:
-            generateTXT(optimizedText, fname);
-            break;
+    try {
+        switch (selectedFormat) {
+            case "pdf":
+                generatePDF(sanitizeForPDF(optimizedText), fname);
+                break;
+            case "docx":
+            case "doc":
+                generateWordDoc(optimizedText, fname);
+                break;
+            case "txt":
+            default:
+                generateTXT(optimizedText, fname);
+                break;
+        }
+    } catch (err) {
+        console.error("Download generation failed:", err);
+        showStep("error");
+        errorMessage.textContent = "Failed to generate the file. Try downloading as TXT instead.";
     }
 });
 
