@@ -301,25 +301,35 @@ async function uploadFile(file) {
         setProcessingStep("finalize");
         setProgress(90, "Preparing your download...");
 
-        const contentType = response.headers.get("content-type") || "";
+        const bodyText = await response.text();
 
-        if (contentType.includes("application/json")) {
-            const data = await response.json();
+        if (!bodyText || bodyText.trim().length === 0) {
+            throw new Error("The server returned an empty response. Check that your n8n workflow is active and the Gemini node is working.");
+        }
 
-            if (data.success === false) {
-                throw new Error(data.error || "Processing failed.");
+        let data = null;
+        try {
+            let parsed = JSON.parse(bodyText);
+            // n8n double-encodes when respondWith:"json" + JSON.stringify() — unwrap if needed
+            if (typeof parsed === "string") {
+                parsed = JSON.parse(parsed);
             }
-
-            optimizedText = data.text || "";
-            const score = data.atsScore || 0;
-            atsScoreEl.textContent = score;
-        } else {
-            const text = await response.text();
-            optimizedText = text;
+            data = parsed;
+        } catch {
+            // Response is plain text — treat it as the resume content directly
+            optimizedText = bodyText;
             atsScoreEl.textContent = "--";
         }
 
-        if (!optimizedText || optimizedText.length < 10) {
+        if (data !== null) {
+            if (data.success === false) {
+                throw new Error(data.error || "Processing failed.");
+            }
+            optimizedText = data.text || data.optimizedResume || "";
+            atsScoreEl.textContent = data.atsScore || "--";
+        }
+
+        if (!optimizedText || optimizedText.trim().length < 10) {
             throw new Error("The server returned an empty result. Please try again.");
         }
 

@@ -56,7 +56,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: false, error: 'No resume file found. Please upload a .pdf, .docx, .doc, or .txt file.' }) }}",
+        "responseBody": "={{ { success: false, error: 'No resume file found. Please upload a .pdf, .docx, .doc, or .txt file.' } }}",
         "options": {
           "responseCode": 400,
           "responseHeaders": {
@@ -134,7 +134,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ success: true, text: $json.optimizedResume, atsScore: $json.atsScore, wordCount: $json.wordCount }) }}",
+        "responseBody": "={{ { success: true, text: $json.optimizedResume, atsScore: $json.atsScore, wordCount: $json.wordCount } }}",
         "options": {
           "responseCode": 200,
           "responseHeaders": {
